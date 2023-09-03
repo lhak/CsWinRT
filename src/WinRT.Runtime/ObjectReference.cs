@@ -141,6 +141,25 @@ namespace WinRT
 
         public unsafe TInterface AsInterface<TInterface>()
         {
+#if NET8_0_OR_GREATER
+            if (typeof(TInterface).IsDefined(typeof(System.Runtime.InteropServices.Marshalling.GeneratedComInterfaceAttribute)))
+            {
+                Guid iid = typeof(TInterface).GUID;
+                IntPtr comPtr = IntPtr.Zero;
+                Marshal.ThrowExceptionForHR(VftblIUnknown.QueryInterface(ThisPtr, &iid, &comPtr));
+                try
+                {
+                    System.Runtime.InteropServices.Marshalling.StrategyBasedComWrappers wrapper = new();
+                    return (TInterface)wrapper.GetOrCreateObjectForComInstance(comPtr, CreateObjectFlags.UniqueInstance | CreateObjectFlags.Unwrap);
+                }
+                finally
+                {
+                    var vftblPtr = Unsafe.AsRef<WinRT.VftblPtr>(comPtr.ToPointer());
+                    var vftblIUnknown = Marshal.PtrToStructure<WinRT.Interop.IUnknownVftbl>(vftblPtr.Vftbl);
+                    vftblIUnknown.Release(comPtr);
+                }
+            }
+#endif
             if (typeof(TInterface).IsDefined(typeof(System.Runtime.InteropServices.ComImportAttribute)))
             {
                 Guid iid = typeof(TInterface).GUID;
@@ -157,7 +176,6 @@ namespace WinRT
                     vftblIUnknown.Release(comPtr);
                 }
             }
-
 #if !NET
             return (TInterface)typeof(TInterface).GetHelperType().GetConstructor(new[] { typeof(IObjectReference) }).Invoke(new object[] { this });
 #else
